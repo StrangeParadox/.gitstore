@@ -22,53 +22,84 @@ class Main:
         self.console.log("Starting gitstore linker", style="bold green", justify="center")
         print()
 
-    def ensuree_directories(self):
+    def ensure_directories(self):
+        # Ensure that the directories exist
         for directory in self.directories.values():
+            # Check if the directory exists
             if not os.path.exists(directory):
-                os.mkdir(directory)
+                # Make the directory
+                os.makedirs(directory, exist_ok=True)
 
-    def walk(self):
+                # Log the creation of the directory
+                print(f"Created directory {directory}", style="bold green")
+
+    def save(self):
+        # Save all the files that are not links from .config into .gitstore/.config using walk
+        for root, dirs, files in os.walk(self.directories['config']):
+            for file in files:
+                # Get the full path of the file
+                full_path = os.path.join(root, file)
+
+                # Check if the file is a link
+                if not os.path.islink(file):
+                    # Get the relative path
+                    relative_path = os.path.relpath(full_path, self.directories['config'])
+
+                    # Get the backup path
+                    backup_path = os.path.join(self.directories['gconfig'], relative_path)
+
+                    # Ensure that the backup path exists
+                    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+
+                    # Copy the file to the backup path
+                    os.system(f"cp {full_path} {backup_path}")
+
+                    # Log the backup
+                    print(f"Moved [bold green]{full_path} to {backup_path}[/bold green]")
+
+                    # Remove the old file
+                    os.remove(full_path)
+
+    def link(self):
+        # Walk through the gconfig directory
         for root, dirs, files in os.walk(self.directories['gconfig']):
             for file in files:
-                # Get the path of the file
-                path = os.path.join(root, file)
+                # Get the full path of the file
+                full_path = os.path.join(root, file)
 
-                # Get the relative path of the file
-                relative_path = os.path.relpath(path, self.directories['gconfig'])
-                
-                # Get the path of the file in the $HOME/.config directory
-                home_path = os.path.join(self.directories['config'], relative_path)
+                if os.path.islink(full_path):
+                    # Check if the link is broken
+                    if not os.path.exists(os.readlink(full_path)):
+                        # Remove the broken link
+                        os.remove(full_path)
 
-                # Check if the file exists in the $HOME/.config directory
-                if os.path.exists(home_path):
-                    # Check if the file is a symlink
-                    if os.path.islink(home_path):
-                        # Check if the symlink is pointing to the right file
-                        if os.readlink(home_path) == path:
-                            print(f"[bold yellow]{relative_path}[/bold yellow] is already linked")
-                        else:
-                            print(f"[bold red]{relative_path}[/bold red] is already linked to a different file")
+                        # Log the removal of the broken link
+                        print(f"Removed broken link [bold red]{full_path}[/bold red]")
+                    
+                    # Read the link and check if it is a link to the config directory
+                    elif not os.readlink(full_path) == os.path.relpath(full_path, self.directories['gconfig']):
+                        # Alert the user that the link is not a link to the config directory
+                        print(f"Link [bold red]{full_path}[/bold red] is not a link to the config directory")
 
-                    # Check if the file is a regular file
-                    elif os.path.isfile(home_path):
-                        # Create a backup of the file
-                        backup_path = os.path.join(self.directories['backup'], relative_path)
-                        
-                        # Ensure the relative path exists
-                        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+                if os.path.isfile(full_path):
+                    # Get the relative path
+                    relative_path = os.path.relpath(full_path, self.directories['gconfig'])
 
-                        # Get the current date/time
-                        now = datetime.now()
-                        
-                        # Format: Mon-01 Jan 2021 12:00:00
-                        date = now.strftime("%a-%d %b %Y %H:%M:%S")
+                    # Get the link path
+                    link_path = os.path.join(self.directories['config'], relative_path)
 
-                        # Move the file to the backup directory
-                        os.rename(home_path, f"{backup_path} ({date})")
-                
-                # Create the symlink
-                os.symlink(path, home_path)
+                    # Ensure that the link path exists
+                    os.makedirs(os.path.dirname(link_path), exist_ok=True)
+
+                    # Create the link
+                    os.symlink(full_path, link_path)
+
+                    # Log the link
+                    print(f"Linked [bold green]{full_path} to {link_path}[/bold green]")
+
 
 if __name__ == '__main__':
     m = Main()
-    m.walk()
+    m.ensure_directories()
+    m.save()
+    m.link()
